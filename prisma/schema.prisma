@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AgentStatus {
+  ACTIVE
+  PAUSED
+  RETIRED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DataSourceType {
+  CSV
+  MOCK
+}
+
+enum AuditAction {
+  AGENT_CREATED
+  AGENT_UPDATED
+  AGENT_PAUSED
+  AGENT_ACTIVATED
+  AGENT_RUN_STARTED
+  AGENT_RUN_COMPLETED
+  APPROVAL_REQUESTED
+  APPROVAL_APPROVED
+  APPROVAL_REJECTED
+  DATA_SOURCE_UPLOADED
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  industry  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  agents      Agent[]
+  dataSources DataSource[]
+  approvals   Approval[]
+  auditLogs   AuditLog[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  agents  Agent[]
+}
+
+model Agent {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  department  String
+  ownerId     String
+  companyId   String
+  status      AgentStatus @default(ACTIVE)
+  riskLevel   RiskLevel   @default(LOW)
+  riskScore   Int         @default(0)
+
+  instructions String
+
+  toolsAllowed Json
+  dataAccess   Json
+
+  approvalRequired Boolean @default(true)
+
+  monthlyCostLimit     Float @default(50)
+  estimatedMonthlyCost Float @default(0)
+
+  lastRunAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner     User       @relation(fields: [ownerId], references: [id])
+  company   Company    @relation(fields: [companyId], references: [id])
+  runs      AgentRun[]
+  approvals Approval[]
+  auditLogs AuditLog[]
+}
+
+model DataSource {
+  id          String         @id @default(cuid())
+  name        String
+  type        DataSourceType
+  companyId   String
+  filePath    String?
+  description String?
+  rowCount    Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  runs    AgentRun[]
+}
+
+model AgentRun {
+  id           String   @id @default(cuid())
+  agentId      String
+  dataSourceId String?
+  input        String?
+  output       String
+  summary      String?
+  tokensUsed   Int      @default(0)
+  costUsd      Float    @default(0)
+  status       String   @default("completed")
+  createdAt    DateTime @default(now())
+
+  agent      Agent       @relation(fields: [agentId], references: [id])
+  dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
+  approvals  Approval[]
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  companyId   String
+  agentId     String
+  runId       String?
+  title       String
+  description String
+  actionType  String
+  riskLevel   RiskLevel
+  status      ApprovalStatus @default(PENDING)
+  requestedBy String
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime       @default(now())
+
+  company Company   @relation(fields: [companyId], references: [id])
+  agent   Agent     @relation(fields: [agentId], references: [id])
+  run     AgentRun? @relation(fields: [runId], references: [id])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  companyId String
+  agentId   String?
+  action    AuditAction
+  message   String
+  metadata  Json?
+  riskLevel RiskLevel?
+  createdAt DateTime    @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  agent   Agent?  @relation(fields: [agentId], references: [id])
+}
